@@ -17,14 +17,16 @@ def _get_required_secret(key: str, cast_type):
         raise RuntimeError(f"Invalid value for secret {key}: {raw}") from exc
 
 
+# Required environment variables
 API_ID = _get_required_secret("API_ID", int)
 API_HASH = _get_required_secret("API_HASH", str)
 
-# IMPORTANT: unique session name for Render
+# IMPORTANT: session file name created/stored on Render
 SESSION_NAME = os.getenv("SESSION_NAME", "render_session")
 
 CHANNEL_ID = _get_required_secret("CHANNEL_ID", int)
 
+# Parse recipient list
 _alert_recipient_raw = os.getenv("ALERT_RECIPIENT_IDS", "").strip()
 if _alert_recipient_raw:
     ALERT_RECIPIENT_IDS: List[int] = [
@@ -35,7 +37,7 @@ if _alert_recipient_raw:
 else:
     ALERT_RECIPIENT_IDS = [_get_required_secret("MAIN_USER_ID", int)]
 
-# The session file MUST NOT be committed to GitHub
+# Telethon client → session file stored using SESSION_NAME
 client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
 
 
@@ -53,15 +55,22 @@ def format_event_message(event) -> str:
 async def start_listener():
     print("🚀 Starting Telegram Alert System...")
 
+    bot_token = os.getenv("BOT_TOKEN")
+
     try:
-        await client.start()
+        await client.start(bot_token=bot_token)
+        print("🤖 Bot logged in successfully.")
     except Exception as exc:
-        print("❌ Failed to start Telethon:", exc)
-        print("💡 If this is AuthKeyDuplicatedError, delete the session file and redeploy.")
+        print("❌ Bot login failed:", exc)
+        print("Make sure BOT_TOKEN is correct.")
         raise
 
-    me = await client.get_me()
-    print(f"✅ Logged in as {me.first_name} (id={me.id})")
+    try:
+        me = await client.get_me()
+        print(f"✅ Logged in as {me.first_name} (id={me.id})")
+    except Exception as exc:
+        print("❌ Failed to authenticate Telegram client:", exc)
+        raise
 
     try:
         channel_entity = await client.get_entity(CHANNEL_ID)
